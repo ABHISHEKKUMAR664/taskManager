@@ -1,43 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { promises as fs } from 'fs';
-import path from 'path';
-
-const SECRET = 'abhi_secret';
-const USERS_FILE = path.join(process.cwd(), 'users.json');
-
-async function readUsers() {
-  try {
-    const data = await fs.readFile(USERS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
+import { DataManager } from '../../../../lib/data';
+import { getJWTSecret } from '../../../../lib/security';
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();
+  
+  // Basic validation
   if (!username || !password) {
     return NextResponse.json({ error: 'Username and password required' }, { status: 400 });
   }
-  const users = await readUsers();
-  let userStatus: "valid" | "invalid" | "notfound" = "notfound";
-  users.find((u: any) => {
-    if (u.username === username && u.password === password) {
-      userStatus = "valid";
-      return true;
-    }
-    if (u.username === username && u.password !== password) {
-      userStatus = "invalid";
-    }
-    return false;
-  });
-  if (userStatus === "notfound") {
-    return NextResponse.json({ error: 'User does not exist' }, { status: 404 });
-  }
-  if (userStatus === "invalid") { 
+  
+  const user = await DataManager.getUser(username);
+  if (!user) {
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   }
-  const token = jwt.sign({ username }, SECRET, { expiresIn: '1d' });
-  return NextResponse.json({ token, username });
+  
+  if (user.password !== password) {
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+  }
+  
+  const token = jwt.sign({ username }, getJWTSecret(), { expiresIn: '1d' });
+  
+  // Create response with security headers
+  const response = NextResponse.json({ token, username });
+  
+  // Security headers
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  response.headers.set('Pragma', 'no-cache');
+  response.headers.set('Expires', '0');
+  
+  return response;
 }

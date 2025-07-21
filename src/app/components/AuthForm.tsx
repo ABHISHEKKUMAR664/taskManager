@@ -18,11 +18,19 @@ export default function AuthForm({ mode, onAuth, onSignupSuccess, toast }: {
     e.preventDefault();
     setError("");
     setSuccess("");
+    
+    // Create request payload
+    const credentials = { username, password };
+    
     const res = await fetch(`/api/auth/${mode}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(credentials),
     });
+    
+    // Clear credentials from memory immediately after use
+    credentials.password = "";
+    
     const data = await res.json();
     if (res.ok) {
       if (mode === "signup") {
@@ -33,9 +41,14 @@ export default function AuthForm({ mode, onAuth, onSignupSuccess, toast }: {
         if (onSignupSuccess) onSignupSuccess();
       } else {
         if (toast) toast.success("Login successful!");
+        // Clear form data after successful login
+        setUsername("");
+        setPassword("");
         onAuth(data.token, data.username);
       }
     } else {
+      // Clear password on error (but keep username for UX)
+      setPassword("");
       setError(data.error || "Unknown error");
       if (toast) toast.error(data.error || "Unknown error");
     }

@@ -1,59 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { promises as fs } from 'fs';
-import path from 'path';
-
-
-const SECRET = 'abhi_secret';
-const TASKS_FILE = path.join(process.cwd(), 'tasks.json');
-const PROJECTS_FILE = path.join(process.cwd(), 'projects.json');
-
-async function readTasks() {
-  try {
-    const data = await fs.readFile(TASKS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
-}
-
-async function writeTasks(tasks: any) {
-  await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf-8');
-}
-
-async function readProjects() {
-  try {
-    const data = await fs.readFile(PROJECTS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
-}
-
-async function writeProjects(projects: any) {
-  await fs.writeFile(PROJECTS_FILE, JSON.stringify(projects, null, 2), 'utf-8');
-}
+import { DataManager } from '../../../lib/data';
+import { getJWTSecret } from '../../../lib/security';
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const { username } = jwt.verify(token, SECRET) as any;
-    const { projectId, title } = await req.json();
+    const { username } = jwt.verify(token, getJWTSecret()) as any;
+    const { projectId, title, status = 'todo' } = await req.json();
     if (!projectId || !title) {
       return NextResponse.json({ error: 'Project ID and title required' }, { status: 400 });
     }
-    const allTasks = await readTasks();
-    const userTasks = allTasks[username] || [];
-    const newTask = {
-      id: Date.now().toString(),
+    
+    const newTask = await DataManager.addTask(username, {
       projectId,
       title,
-      completed: false
-    };
-    userTasks.push(newTask);
-    allTasks[username] = userTasks;
-    await writeTasks(allTasks);
+      status,
+    });
+    
     return NextResponse.json({ task: newTask });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -64,20 +29,13 @@ export async function DELETE(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const { username } = jwt.verify(token, SECRET) as any;
+    const { username } = jwt.verify(token, getJWTSecret()) as any;
     const { id } = await req.json();
     if (!id) {
       return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
     }
-    const allTasks = await readTasks();
-    let userTasks = allTasks[username] || [];
-    const initialLength = userTasks.length;
-    userTasks = userTasks.filter((task: any) => task.id !== id);
-    allTasks[username] = userTasks;
-    await writeTasks(allTasks);
-    if (userTasks.length === initialLength) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    }
+    
+    await DataManager.deleteTask(username, id);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -88,26 +46,20 @@ export async function PUT(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const { username } = jwt.verify(token, SECRET) as any;
-    const { id, title, completed } = await req.json();
+    const { username } = jwt.verify(token, getJWTSecret()) as any;
+    const { id, title, completed, status } = await req.json();
     if (!id) return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
-    const allTasks = await readTasks();
-    let userTasks = allTasks[username] || [];
-    let updated = false;
-    userTasks = userTasks.map((task: any) => {
-      if (task.id === id) {
-        updated = true;
-        return {
-          ...task,
-          title: title !== undefined ? title : task.title,
-          completed: completed !== undefined ? completed : task.completed,
-        };
-      }
-      return task;
-    });
-    allTasks[username] = userTasks;
-    await writeTasks(allTasks);
-    if (!updated) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    
+    const updates: any = {};
+    if (title !== undefined) updates.title = title;
+    if (completed !== undefined) updates.completed = completed;
+    if (status !== undefined) updates.status = status;
+    
+    const updatedTask = await DataManager.updateTask(username, id, updates);
+    if (!updatedTask) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+    
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -118,13 +70,20 @@ export async function GET(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const { username } = jwt.verify(token, SECRET) as any;
-    const allTasks = await readTasks();
-    const userTasks = allTasks[username] || [];
-    return NextResponse.json({ tasks: userTasks });
+    const { username } = jwt.verify(token, getJWTSecret()) as any;
+    const url = new URL(req.url);
+    const projectId = url.searchParams.get('projectId');
+    
+    // Get tasks with migration for status field
+    const userTasks = await DataManager.migrateTaskStatuses(username);
+    
+    // Filter by project if specified
+    const filteredTasks = projectId 
+      ? userTasks.filter((task: any) => task.projectId === projectId)
+      : userTasks;
+    
+    return NextResponse.json({ tasks: filteredTasks });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 }
-
-
