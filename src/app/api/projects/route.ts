@@ -1,25 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 const SECRET = 'abhi_secret';
+const PROJECTS_FILE = path.join(process.cwd(), 'project.json');
 
-function getProjects(username: string) {
-  if (typeof global !== 'undefined') {
-    // @ts-ignore
-    global.projects = global.projects || {};
-    // @ts-ignore
-    return global.projects[username] || [];
+async function readProjects() {
+  try {
+    const data = await fs.readFile(PROJECTS_FILE, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return {};
   }
-  return [];
 }
 
-function setProjects(username: string, projects: any[]) {
-  if (typeof global !== 'undefined') {
-    // @ts-ignore
-    global.projects = global.projects || {};
-    // @ts-ignore
-    global.projects[username] = projects;
-  }
+async function writeProjects(projects: any) {
+  await fs.writeFile(PROJECTS_FILE, JSON.stringify(projects, null, 2), 'utf-8');
 }
 
 export async function GET(req: NextRequest) {
@@ -27,7 +24,8 @@ export async function GET(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const { username } = jwt.verify(token, SECRET) as any;
-    const projects = getProjects(username);
+    const allProjects = await readProjects();
+    const projects = allProjects[username] || [];
     return NextResponse.json({ projects });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -41,10 +39,12 @@ export async function POST(req: NextRequest) {
     const { username } = jwt.verify(token, SECRET) as any;
     const { name } = await req.json();
     if (!name) return NextResponse.json({ error: 'Project name required' }, { status: 400 });
-    const projects = getProjects(username);
+    const allProjects = await readProjects();
+    const userProjects = allProjects[username] || [];
     const newProject = { id: Date.now().toString(), name };
-    projects.push(newProject);
-    setProjects(username, projects);
+    userProjects.push(newProject);
+    allProjects[username] = userProjects;
+    await writeProjects(allProjects);
     return NextResponse.json({ project: newProject });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -57,9 +57,11 @@ export async function DELETE(req: NextRequest) {
   try {
     const { username } = jwt.verify(token, SECRET) as any;
     const { id } = await req.json();
-    let projects = getProjects(username);
-    projects = projects.filter((p: any) => p.id !== id);
-    setProjects(username, projects);
+    const allProjects = await readProjects();
+    let userProjects = allProjects[username] || [];
+    userProjects = userProjects.filter((p: any) => p.id !== id);
+    allProjects[username] = userProjects;
+    await writeProjects(allProjects);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });

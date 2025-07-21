@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'kunal_secret';
+const SECRET = 'abhi_secret';
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();

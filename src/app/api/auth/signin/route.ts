@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const SECRET = '1234567890abcdefghijklmnopqrstuvwxyz';
+const SECRET = 'abhi_secret';
 const USERS_FILE = path.join(process.cwd(), 'users.json');
 
 async function readUsers() {

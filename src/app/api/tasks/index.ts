@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'kunal_secret';
+const SECRET = 'abhi_secret';
 
 function getTasks(username: string) {
   if (typeof global !== 'undefined') {

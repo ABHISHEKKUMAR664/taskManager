@@ -18,8 +18,9 @@ export default function DashboardPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [selectedProject, setSelectedProject] = useState<any>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
-  // Fetch projects on mount
+  
   useEffect(() => {
     if (!token) return;
     fetch("/api/projects", {
@@ -37,6 +38,8 @@ export default function DashboardPage() {
     })
       .then((res) => res.json())
       .then((data) => setTasks(data.tasks || []));
+    
+    setSelectedTaskIds([]);
   }, [token, selectedProject, setTasks]);
 
   const handleAddProject = async () => {
@@ -90,16 +93,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleToggleTask = async (task: any) => {
-    const res = await fetch("/api/tasks", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id: task.id, title: task.title, completed: !task.completed }),
-    });
-    if (res.ok) {
-      updateTask({ ...task, completed: !task.completed });
-    }
-  };
 
   const handleDeleteTask = async (id: string) => {
     const res = await fetch("/api/tasks", {
@@ -174,22 +167,55 @@ export default function DashboardPage() {
               <IconButton color="primary" onClick={() => setTaskDialogOpen(true)}><AddIcon /></IconButton>
             )}
           </div>
-          <List>
-            {tasks.map((task) => (
-              <ListItem
-                key={task.id}
-                secondaryAction={
-                  <IconButton edge="end" color="error" onClick={() => handleDeleteTask(task.id)}>
-                    <DeleteIcon />
-                  </IconButton>
+          {/* Show Delete Selected button if any tasks are selected */}
+          {selectedTaskIds.length > 0 && (
+            <Button
+              variant="contained"
+              color="error"
+              className="mb-2"
+              onClick={async () => {
+                for (const id of selectedTaskIds) {
+                  await fetch("/api/tasks", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ id }),
+                  });
+                  removeTask(id);
                 }
-              >
-                <ListItemButton>
-                  <Checkbox checked={task.completed} onChange={() => handleToggleTask(task)} />
-                  <span className={task.completed ? "line-through" : ""}>{task.title}</span>
-                </ListItemButton>
-              </ListItem>
-            ))}
+                setSelectedTaskIds([]);
+                toast.error("Selected tasks deleted!");
+              }}
+            >
+              Delete Selected ({selectedTaskIds.length})
+            </Button>
+          )}
+          <List>
+            {tasks
+              .filter((task) => selectedProject && task.projectId === selectedProject.id)
+              .map((task) => (
+                <ListItem
+                  key={task.id}
+                  secondaryAction={
+                    <IconButton edge="end" color="error" onClick={() => handleDeleteTask(task.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  }
+                >
+                  <ListItemButton>
+                    <Checkbox
+                      checked={selectedTaskIds.includes(task.id)}
+                      onChange={e => {
+                        setSelectedTaskIds(prev =>
+                          e.target.checked
+                            ? [...prev, task.id]
+                            : prev.filter(id => id !== task.id)
+                        );
+                      }}
+                    />
+                    <span>{task.title}</span>
+                  </ListItemButton>
+                </ListItem>
+              ))}
           </List>
         </div>
       </div>
