@@ -51,6 +51,24 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { username } = jwt.verify(token, SECRET) as any;
+    const { id, name } = await req.json();
+    if (!id || !name) return NextResponse.json({ error: 'Project ID and name required' }, { status: 400 });
+    const allProjects = await readProjects();
+    let userProjects = allProjects[username] || [];
+    userProjects = userProjects.map((p: any) => p.id === id ? { ...p, name } : p);
+    allProjects[username] = userProjects;
+    await writeProjects(allProjects);
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
