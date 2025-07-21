@@ -157,9 +157,9 @@ src/
 
 ### Default Test Users
 ```bash
-Username: kunal    Password: kunal
-Username: hello    Password: hello
-Username: 123      Password: 123
+Username: abhishek    Password: abhishek
+Username: hello       Password: hello
+Username: 123         Password: 123
 ```
 
 ### Creating New Users
